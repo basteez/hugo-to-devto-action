@@ -115,6 +115,7 @@ jobs:
           git init -q -b main
           git config user.email "smoke@example.invalid"
           git config user.name "smoke"
+          git commit -q --allow-empty -m "smoke: initial empty commit"
           mkdir -p content/post
           cat > content/post/smoke.md <<'POST'
           ---
@@ -132,7 +133,7 @@ jobs:
           export PYTHONPATH="${GITHUB_WORKSPACE}"
           OUT_FILE="$(mktemp)"
           python -m crosspost \
-            --before 4b825dc642cb6eb9a060e54bf8d69288fbee4904 \
+            --before 0000000000000000000000000000000000000000 \
             --after HEAD \
             --post-dir content/post \
             --dry-run \
