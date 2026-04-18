@@ -1,9 +1,5 @@
 name: Hugo to dev.to Crosspost
-description: >-
-  Mirror new Hugo posts touched in a push range to dev.to as drafts. Detects
-  eligible posts via git diff, parses Hugo frontmatter, and creates dev.to
-  drafts for posts that have draft=false and do not already exist on dev.to
-  (dedup by title).
+description: Mirror new Hugo posts to dev.to as drafts. Parses Hugo frontmatter, dedupes by title, supports dry-run.
 author: Tiziano Basile
 branding:
   icon: upload-cloud
