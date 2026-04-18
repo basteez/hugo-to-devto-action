@@ -1,11 +1,10 @@
-name: Hugo → dev.to Crosspost
+name: Hugo to dev.to Crosspost
 description: >-
   Mirror new Hugo posts touched in a push range to dev.to as drafts. Detects
   eligible posts via git diff, parses Hugo frontmatter, and creates dev.to
   drafts for posts that have draft=false and do not already exist on dev.to
   (dedup by title).
 author: Tiziano Basile
-
 branding:
   icon: upload-cloud
   color: purple
@@ -44,7 +43,7 @@ inputs:
       (no POST /articles call to dev.to) and logs what would happen. Any other
       value leaves dry-run off.
     required: false
-    default: 'false'
+    default: "false"
 
 runs:
   using: composite
@@ -52,7 +51,7 @@ runs:
     - name: Set up Python 3.11
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: "3.11"
 
     - name: Install crosspost dependencies
       shell: bash
