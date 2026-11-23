@@ -16,6 +16,13 @@ from .devto import (
 from .frontmatter import FrontmatterError, parse as parse_frontmatter
 from .models import PostFile, PostOutcome, RunSummary
 from .reconcile import build_title_index
+from .transform import (
+    DEFAULT_MERMAID_SERVICE,
+    MERMAID_MODES,
+    TransformConfigError,
+    TransformOptions,
+    prepare,
+)
 from .report import format_outcome, format_step_summary, format_summary
 
 
@@ -39,6 +46,28 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="Skip POST /articles calls; log what would happen.",
+    )
+    parser.add_argument(
+        "--site-url",
+        default=os.environ.get("CROSSPOST_SITE_URL", ""),
+        help="Public base URL of the Hugo site. When set: relative images "
+        "become absolute and canonical_url/main_image are sent. Off by default.",
+    )
+    parser.add_argument(
+        "--permalink-pattern",
+        default=os.environ.get("CROSSPOST_PERMALINK_PATTERN", ""),
+        help="Post permalink, e.g. /posts/:slug/. Required with --site-url.",
+    )
+    parser.add_argument(
+        "--mermaid",
+        default=os.environ.get("CROSSPOST_MERMAID", "keep") or "keep",
+        help=f"Mermaid fences: {' or '.join(MERMAID_MODES)} (default keep).",
+    )
+    parser.add_argument(
+        "--mermaid-service-url",
+        default=os.environ.get("CROSSPOST_MERMAID_SERVICE_URL", "")
+        or DEFAULT_MERMAID_SERVICE,
+        help=f"Renderer for --mermaid image (default {DEFAULT_MERMAID_SERVICE}).",
     )
     parser.add_argument(
         "--repo-root",
@@ -73,6 +102,20 @@ def run(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     repo_root = Path(args.repo_root) if args.repo_root else Path.cwd()
     summary = RunSummary()
+
+    options = TransformOptions(
+        site_url=args.site_url.strip(),
+        permalink_pattern=args.permalink_pattern.strip(),
+        mermaid=args.mermaid.strip().lower(),
+        mermaid_service_url=args.mermaid_service_url.strip(),
+    )
+    try:
+        options.validate()
+    except TransformConfigError as exc:
+        summary.global_failure = f"invalid options: {exc}"
+        _log(format_summary(summary, args.before, args.after))
+        print(f"global_failure: {summary.global_failure}", file=sys.stderr)
+        return 1
 
     api_key = os.environ.get("DEVTO_API_KEY", "")
     if not api_key:
@@ -177,6 +220,8 @@ def run(argv: list[str] | None = None) -> int:
             )
             continue
 
+        prepared = prepare(post, options)
+
         if args.dry_run:
             summary.outcomes.append(
                 PostOutcome(
@@ -187,12 +232,21 @@ def run(argv: list[str] | None = None) -> int:
                 )
             )
             _log(f"- would create draft: {title}")
+            if prepared.canonical_url:
+                _log(f"  canonical_url: {prepared.canonical_url}")
+            if prepared.main_image:
+                _log(f"  main_image: {prepared.main_image}")
             index.add(title)
             continue
 
         create_attempts += 1
         try:
-            created = client.create_article(title=title, body_markdown=post.body)
+            created = client.create_article(
+                title=title,
+                body_markdown=prepared.body_markdown,
+                canonical_url=prepared.canonical_url,
+                main_image=prepared.main_image,
+            )
         except AuthRejected as exc:
             summary.global_failure = f"auth rejected on create: {exc}"
             break

@@ -41,6 +41,41 @@ inputs:
     required: false
     default: "false"
 
+  site-url:
+    description: >-
+      Optional. Public base URL of your Hugo site, for example
+      https://example.com. When set, relative image links in the post become
+      absolute, and the draft gets canonical_url (the post URL) and main_image
+      (front matter `image`). Empty (the default) keeps the previous behaviour.
+    required: false
+    default: ""
+
+  permalink-pattern:
+    description: >-
+      Required when site-url is set. Path of a post on your site, as in your
+      Hugo permalinks config, for example /posts/:slug/. Supported tokens:
+      :slug, :title, :filename, :year, :month, :day. A front matter `url`
+      wins over the pattern.
+    required: false
+    default: ""
+
+  mermaid:
+    description: >-
+      What to do with ```mermaid code blocks, which dev.to does not render.
+      `keep` (the default) leaves them as code. `image` replaces each one with
+      an image rendered by mermaid-service-url; the diagram source is sent to
+      that service inside the image URL.
+    required: false
+    default: keep
+
+  mermaid-service-url:
+    description: >-
+      Renderer used when mermaid is `image`. Must serve
+      /img/pako:<data>?type=png like mermaid.ink (a self-hosted mermaid.ink
+      works too).
+    required: false
+    default: https://mermaid.ink
+
 runs:
   using: composite
   steps:
@@ -59,6 +94,10 @@ runs:
       shell: bash
       env:
         DEVTO_API_KEY: ${{ inputs.devto-api-key }}
+        CROSSPOST_SITE_URL: ${{ inputs.site-url }}
+        CROSSPOST_PERMALINK_PATTERN: ${{ inputs.permalink-pattern }}
+        CROSSPOST_MERMAID: ${{ inputs.mermaid }}
+        CROSSPOST_MERMAID_SERVICE_URL: ${{ inputs.mermaid-service-url }}
         PYTHONPATH: ${{ github.action_path }}
       run: |
         python -m crosspost \

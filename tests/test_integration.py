@@ -656,3 +656,115 @@ def test_step_summary_skipped_when_env_unset(
     assert exit_code == 0
     leftovers = list(tmp_path.glob("summary*.md"))
     assert leftovers == []
+
+
+def _setup_single_post(repo, devto_responses, body: str, extra_fm: str = ""):
+    repo.write("README.md", "readme\n")
+    repo.add_all()
+    before = repo.commit("init")
+    repo.write(
+        "content/post/2026-04-17-foo/index.md",
+        f'---\ntitle: "Foo Bar"\nslug: foo-bar\ndate: 2026-04-17\ndraft: false\n{extra_fm}---\n{body}',
+    )
+    repo.add_all()
+    after = repo.commit("add foo")
+    devto_responses.add(
+        devto_responses.GET, f"{BASE}/articles/me/published", json=[], status=200
+    )
+    devto_responses.add(
+        devto_responses.GET, f"{BASE}/articles/me/unpublished", json=[], status=200
+    )
+    devto_responses.add(
+        devto_responses.POST,
+        f"{BASE}/articles",
+        json={"id": 50, "title": "Foo Bar", "published": False, "url": "https://dev.to/t/50"},
+        status=201,
+    )
+    return before, after
+
+
+_RICH_BODY = (
+    "![wiring](wiring.png)\n\n"
+    '```mermaid {caption="Flow"}\ngraph LR\n  A-->B\n```\n'
+)
+
+
+def test_default_options_send_body_unchanged(
+    tmp_git_repo, devto_responses, monkeypatch
+):
+    repo = tmp_git_repo()
+    before, after = _setup_single_post(
+        repo, devto_responses, _RICH_BODY, extra_fm="image: cover.jpg\n"
+    )
+    monkeypatch.setenv("DEVTO_API_KEY", "test-key")
+    monkeypatch.setenv("DEVTO_API_BASE", BASE)
+
+    assert run(["--before", before, "--after", after, "--repo-root", str(repo.path)]) == 0
+
+    post_calls = [c for c in devto_responses.calls if c.request.method == "POST"]
+    payload = json.loads(post_calls[0].request.body)["article"]
+    assert set(payload) == {"title", "body_markdown", "published"}
+    assert payload["body_markdown"] == _RICH_BODY
+
+
+def test_site_url_and_mermaid_image_rewrite_the_draft(
+    tmp_git_repo, devto_responses, monkeypatch
+):
+    repo = tmp_git_repo()
+    before, after = _setup_single_post(
+        repo, devto_responses, _RICH_BODY, extra_fm="image: cover.jpg\n"
+    )
+    monkeypatch.setenv("DEVTO_API_KEY", "test-key")
+    monkeypatch.setenv("DEVTO_API_BASE", BASE)
+    # Inputs arrive as environment variables from action.yml.
+    monkeypatch.setenv("CROSSPOST_SITE_URL", "https://example.com")
+    monkeypatch.setenv("CROSSPOST_PERMALINK_PATTERN", "/p/:slug/")
+    monkeypatch.setenv("CROSSPOST_MERMAID", "image")
+
+    assert run(["--before", before, "--after", after, "--repo-root", str(repo.path)]) == 0
+
+    post_calls = [c for c in devto_responses.calls if c.request.method == "POST"]
+    payload = json.loads(post_calls[0].request.body)["article"]
+    assert payload["canonical_url"] == "https://example.com/p/foo-bar/"
+    assert payload["main_image"] == "https://example.com/p/foo-bar/cover.jpg"
+    body = payload["body_markdown"]
+    assert "![wiring](https://example.com/p/foo-bar/wiring.png)" in body
+    assert "![Flow](https://mermaid.ink/img/pako:" in body
+    assert "```mermaid" not in body
+
+
+def test_dry_run_logs_canonical_url(tmp_git_repo, devto_responses, monkeypatch, capsys):
+    repo = tmp_git_repo()
+    before, after = _setup_single_post(repo, devto_responses, "Hi.\n")
+    monkeypatch.setenv("DEVTO_API_KEY", "test-key")
+    monkeypatch.setenv("DEVTO_API_BASE", BASE)
+
+    code = run(
+        [
+            "--before", before, "--after", after, "--repo-root", str(repo.path),
+            "--dry-run", "--site-url", "https://example.com",
+            "--permalink-pattern", "/posts/:slug/",
+        ]
+    )
+    assert code == 0
+    assert not [c for c in devto_responses.calls if c.request.method == "POST"]
+    assert "canonical_url: https://example.com/posts/foo-bar/" in capsys.readouterr().out
+
+
+def test_site_url_without_pattern_is_global_failure(
+    tmp_git_repo, devto_responses, monkeypatch, capsys
+):
+    repo = tmp_git_repo()
+    before, after = _setup_single_post(repo, devto_responses, "Hi.\n")
+    monkeypatch.setenv("DEVTO_API_KEY", "test-key")
+    monkeypatch.setenv("DEVTO_API_BASE", BASE)
+
+    code = run(
+        [
+            "--before", before, "--after", after, "--repo-root", str(repo.path),
+            "--site-url", "https://example.com",
+        ]
+    )
+    assert code == 1
+    assert "permalink-pattern is required" in capsys.readouterr().err
+    assert not devto_responses.calls

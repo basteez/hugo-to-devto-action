@@ -91,6 +91,32 @@ def test_create_article_posts_expected_payload(devto_responses):
     assert call.request.headers["api-key"] == "secret-key"
 
 
+def test_create_article_sends_optional_fields_only_when_set(devto_responses):
+    devto_responses.add(
+        devto_responses.POST,
+        f"{BASE}/articles",
+        json={"id": 43, "title": "T", "published": False, "url": "https://x/43"},
+        status=201,
+    )
+    client = DevtoClient(api_key="secret-key", base_url=BASE)
+    client.create_article(
+        "T",
+        "body",
+        canonical_url="https://example.com/p/t/",
+        main_image="https://example.com/p/t/cover.jpg",
+    )
+    payload = json.loads(devto_responses.calls[0].request.body)
+    assert payload == {
+        "article": {
+            "title": "T",
+            "body_markdown": "body",
+            "published": False,
+            "canonical_url": "https://example.com/p/t/",
+            "main_image": "https://example.com/p/t/cover.jpg",
+        }
+    }
+
+
 def test_create_article_422_raises_non_retryable(devto_responses):
     devto_responses.add(
         devto_responses.POST,
