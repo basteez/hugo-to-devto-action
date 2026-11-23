@@ -158,14 +158,25 @@ class DevtoClient:
     def list_unpublished(self) -> Iterator[DevtoArticle]:
         yield from self._paginate("/articles/me/unpublished")
 
-    def create_article(self, title: str, body_markdown: str) -> DevtoArticle:
-        payload = {
-            "article": {
-                "title": title,
-                "body_markdown": body_markdown,
-                "published": False,
-            }
+    def create_article(
+        self,
+        title: str,
+        body_markdown: str,
+        canonical_url: str | None = None,
+        main_image: str | None = None,
+    ) -> DevtoArticle:
+        article: dict[str, object] = {
+            "title": title,
+            "body_markdown": body_markdown,
+            "published": False,
         }
+        # Optional fields are sent only when set, so the default payload is
+        # unchanged.
+        if canonical_url:
+            article["canonical_url"] = canonical_url
+        if main_image:
+            article["main_image"] = main_image
+        payload = {"article": article}
 
         def call() -> DevtoArticle:
             response = self.session.post(

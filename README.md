@@ -41,6 +41,28 @@ jobs:
 | `after` | yes | — | "After" SHA of the push range. Typically `${{ github.event.after }}`. |
 | `post-dir` | no | `content/post` | Directory (relative to the consumer repo root) that contains Hugo posts. |
 | `dry-run` | no | `'false'` | When set to the literal string `'true'`, the action simulates crossposting and logs what would happen (no POST to dev.to). |
+| `site-url` | no | `''` | Public base URL of your Hugo site (e.g. `https://example.com`). When set, relative image links become absolute and the draft gets `canonical_url` and `main_image`. Empty keeps the previous behaviour. |
+| `permalink-pattern` | with `site-url` | `''` | Path of a post on your site, matching your Hugo `permalinks` config (e.g. `/posts/:slug/`). Tokens: `:slug`, `:title`, `:filename`, `:year`, `:month`, `:day`. |
+| `mermaid` | no | `keep` | `keep` leaves ` ```mermaid ` blocks as code (dev.to does not render them). `image` replaces each block with a rendered image. |
+| `mermaid-service-url` | no | `https://mermaid.ink` | Renderer used by `mermaid: image`; must serve `/img/pako:<data>?type=png`. |
+
+## Optional rewrites
+
+All of these are **off by default**: without the new inputs the action sends exactly what it sent before.
+
+```yaml
+      - uses: basteez/hugo-to-devto-action@v1
+        with:
+          devto-api-key: ${{ secrets.DEVTO_API_KEY }}
+          before: ${{ github.event.before }}
+          after: ${{ github.event.after }}
+          site-url: https://example.com
+          permalink-pattern: /posts/:slug/
+          mermaid: image
+```
+
+- **`site-url` + `permalink-pattern`**: the post URL is built from the pattern (a front matter `url` wins; `:slug` uses front matter `slug`, else the title made URL-safe). That URL becomes the draft's `canonical_url`, so search engines keep pointing at your blog. Relative image sources in the body (`![](img.png)`, `<img src="img.png">`) are resolved against the post URL (`/abs/path.png` against `site-url`), and front matter `image` becomes `main_image`. Code blocks are left untouched.
+- **`mermaid: image`**: each ` ```mermaid ` fenced block becomes `![caption](<service>/img/pako:…?type=png)`. A Hugo-style caption (` ```mermaid {caption="…"} `) becomes the alt text and an italic line under the image. **The diagram source travels inside the image URL to the rendering service** (mermaid.ink by default); point `mermaid-service-url` at a self-hosted instance if that matters to you.
 
 ## Required secrets
 
